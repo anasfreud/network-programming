@@ -1,3 +1,5 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
 #include <iostream>
 #include <winsock2.h>
 
@@ -10,8 +12,9 @@ using namespace std;
 
 int cleanUp()
 {
+
 	if (WSACleanup() == SOCKET_ERROR) {
-		cout << "WSACleanup error: " << WSAGetLastError() << '\n';
+		cout << "WSACleanup() error " << WSAGetLastError() << '\n';
 		return 0;
 	} else {
 		return 1;
@@ -33,48 +36,46 @@ int main()
 	}
 
 
-	SOCKET listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+	SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
 
-	if (listen_socket == INVALID_SOCKET) {
+	if (s == INVALID_SOCKET) {
 		cout << "socket error: " << WSAGetLastError() << '\n';
-		closesocket(listen_socket);
+		closesocket(s);
 		cleanUp();
 	}
 
-	sockaddr_in s_in;
 
-	s_in.sin_family = AF_INET;
-	s_in.sin_port = htons(SERVER_PORT);
-	s_in.sin_addr.s_addr = INADDR_ANY;
+	sockaddr_in remote_addr;
 
-	iResult = bind(listen_socket, (sockaddr*) &s_in, sizeof(s_in));
+	ZeroMemory(&remote_addr, sizeof(remote_addr));
 
-	if (iResult == INVALID_SOCKET) {
-		cout << "bind error: " << WSAGetLastError() << '\n';
-		closesocket(listen_socket);
-		cleanUp();
-	}
+	remote_addr.sin_family = AF_INET;
+	remote_addr.sin_port = htons(SERVER_PORT);
+	remote_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-	iResult = listen(listen_socket, SOMAXCONN);
+	iResult = connect(s, (sockaddr*) &remote_addr, sizeof(remote_addr));
+
 	if (iResult == SOCKET_ERROR) {
-		cout << "listen error: " << WSAGetLastError() << '\n';
-		closesocket(listen_socket);
+		cout << "Server connection error: " << WSAGetLastError() << '\n';
+		closesocket(s);
 		cleanUp();
 	}
 
 	int from_len;
-	sockaddr_in from_s_in;
-	from_len = sizeof(from_s_in);
+	char buf[64] = { 0 };
 
-	SOCKET new_socket;
+	string msg;
 
-	while (true) {
-		new_socket = accept(listen_socket, (sockaddr*)&from_s_in, &from_len);
-		cout << "New connection\n";
-		closesocket(new_socket);
-	}
+	do {
+		from_len = recv(s, (char*)buf, 64, 0);
 
-	closesocket(listen_socket);
+	} while (msg != "Bye");
+
+
+
+
+
+	closesocket(s);
 	cleanUp();
 
 	return 0;
