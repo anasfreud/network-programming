@@ -1,13 +1,7 @@
 #include <iostream>
-
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-
-// используется 2-я версия winsock
 #include <winsock2.h>
 
-// linker подключит библиотеку в список библиотечных зависимостей
 #pragma comment (lib, "Ws2_32.lib")
-
 
 using namespace std;
 
@@ -16,72 +10,71 @@ using namespace std;
 
 int cleanUp()
 {
-	// освобождение ресурсов, выделенных Winsock
-
 	if (WSACleanup() == SOCKET_ERROR) {
-		cout << "WSACleanup() error " << WSAGetLastError() << '\n';
+		cout << "WSACleanup error: " << WSAGetLastError() << '\n';
 		return 0;
+	} else {
+		return 1;
 	}
-	return 1;
 }
+
 
 int main()
 {
 	int iResult;
 
-	// 0) <регистрация приложения в библиотеке>
 	WSAData wsaData;
 
-	if (WSAStartup(0x0202, &wsaData)) { //0x0202 - версия 2.2 интерфейса Winsock
-		cout << "WSAStartup() error " << WSAGetLastError() << '\n';
+	iResult = WSAStartup(0x0202, &wsaData);
+
+	if (iResult) {
+		cout << "WSAStartup error: " << WSAGetLastError() << '\n';
 		cleanUp();
 	}
 
 
-	// 1) <создаем сокет>
-	// AF_INET - протокол IPv4, 
-	// SOCK_STREAM - потоковый режим соединения, 
-	// 0 - протокол соединения по умолчанию (TCP)
+	SOCKET listen_socket = socket(AF_INET, SOCK_STREAM, 0);
 
-	SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
-	if (s == INVALID_SOCKET) {
-		cout << "socket() error " << WSAGetLastError() << '\n';
+	if (listen_socket == INVALID_SOCKET) {
+		cout << "socket error: " << WSAGetLastError() << '\n';
+		closesocket(listen_socket);
 		cleanUp();
 	}
 
+	sockaddr_in s_in;
 
-	// 2) <описываем адрес удаленного сокета>
-	sockaddr_in remote_addr;
+	s_in.sin_family = AF_INET;
+	s_in.sin_port = htons(SERVER_PORT);
+	s_in.sin_addr.s_addr = INADDR_ANY;
 
-	ZeroMemory(&remote_addr, sizeof(remote_addr));
+	iResult = bind(listen_socket, (sockaddr*) &s_in, sizeof(s_in));
 
-	remote_addr.sin_family = AF_INET; // задали семейство IP (IPv4)
+	if (iResult == INVALID_SOCKET) {
+		cout << "bind error: " << WSAGetLastError() << '\n';
+		closesocket(listen_socket);
+		cleanUp();
+	}
 
-	// htons - преобразовывает данные локального хоста в сетевой формат
-	remote_addr.sin_port = htons(SERVER_PORT); // задали порт сервера
-
-	// s_addr ~ S_un.S_addr
-	remote_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // задали IP сервера
-
-
-	// 3) <подключаем сокет к удаленному сокету сервера>
-	iResult = connect(s, (sockaddr*) &remote_addr, sizeof(remote_addr));
-
+	iResult = listen(listen_socket, SOMAXCONN);
 	if (iResult == SOCKET_ERROR) {
-		cout << "Server connection error: " << WSAGetLastError() << '\n';
-		closesocket(s);
+		cout << "listen error: " << WSAGetLastError() << '\n';
+		closesocket(listen_socket);
 		cleanUp();
 	}
 
+	int from_len;
+	sockaddr_in from_s_in;
+	from_len = sizeof(from_s_in);
 
+	SOCKET new_socket;
 
+	while (true) {
+		new_socket = accept(listen_socket, (sockaddr*)&from_s_in, &from_len);
+		cout << "New connection\n";
+		closesocket(new_socket);
+	}
 
-
-
-	// n) закрываем сокет
-	closesocket(s);
-
-
+	closesocket(listen_socket);
 	cleanUp();
 
 	return 0;
