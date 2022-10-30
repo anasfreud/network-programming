@@ -17,7 +17,8 @@ int cleanUp()
 	if (WSACleanup() == SOCKET_ERROR) {
 		cout << "WSACleanup error: " << WSAGetLastError() << '\n';
 		return 0;
-	} else {
+	}
+	else {
 		return 1;
 	}
 }
@@ -52,15 +53,13 @@ int main()
 	s_in.sin_port = htons(SERVER_PORT);
 	s_in.sin_addr.s_addr = INADDR_ANY;
 
-	iResult = bind(listen_socket, (sockaddr*) &s_in, sizeof(s_in));
+	iResult = bind(listen_socket, (sockaddr*)&s_in, sizeof(s_in));
 
 	if (iResult == INVALID_SOCKET) {
 		cout << "bind error: " << WSAGetLastError() << '\n';
 		closesocket(listen_socket);
 		return cleanUp();
 	}
-
-	cout << inet_ntoa(s_in.sin_addr);
 
 	iResult = listen(listen_socket, SOMAXCONN);
 	if (iResult == SOCKET_ERROR) {
@@ -69,21 +68,18 @@ int main()
 		return cleanUp();
 	}
 
-
-
 	SOCKET from_socket;
 	sockaddr_in from_s_in;
 
 	char buf[BUF_SIZE];
 
-	string msg = "Hello from server!";
 	cout << "Server has started on port " << SERVER_PORT << '\n';
-	
+	string msg = "Hello from server!";
+
 	while (true) {
 		int from_len = sizeof(from_s_in);
 		from_socket = accept(listen_socket, (sockaddr*)&from_s_in, &from_len);
 
-		
 		cout << "New connection with " << inet_ntoa(from_s_in.sin_addr) << '\n';
 
 		while (true) {
@@ -92,10 +88,11 @@ int main()
 
 			from_len = recv(from_socket, (char*)&buf, BUF_SIZE, 0);
 
-			if ((string)buf == "stop") {
+			string respond(buf, 4);
+			if (respond == "stop") {
 				break;
 			}
-			
+
 			cout << "Client requested: ";
 
 			for (int i = 0; i < from_len; i++) {
@@ -103,7 +100,7 @@ int main()
 			}
 			cout << '\n';
 
-			
+
 			cout << "Please, enter your respond\n";
 			getline(cin, msg);
 		}
