@@ -61,34 +61,31 @@ int main()
 		return cleanUp();
 	}
 
-	/*iResult = listen(listen_socket, SOMAXCONN);
-	if (iResult == SOCKET_ERROR) {
-		cout << "listen error: " << WSAGetLastError() << '\n';
-		closesocket(listen_socket);
-		return cleanUp();
-	}*/
 
 	SOCKET from_socket;
 	sockaddr_in from_s_in;
+	int from_len;
 
 	char buf[BUF_SIZE];
-
-	//cout << "Server has started on port " << SERVER_PORT << '\n';
-	//string msg = "Hello from server!";
 
 	string msg;
 	
 	while (true) {
 
-		int from_len = sizeof(from_s_in);
-		int bsize = recvfrom(listen_socket, &buf[0], sizeof(buf) - 1, 0, (sockaddr*)&from_s_in, &from_len);
-		if (bsize == SOCKET_ERROR) {
+		from_len = sizeof(from_s_in);
+
+		int buf_size = recvfrom(listen_socket, &buf[0], sizeof(buf) - 1, 0, (sockaddr*)&from_s_in, &from_len);
+		
+		if (buf_size == SOCKET_ERROR) {
 			cout << "recvfrom error" << WSAGetLastError() << '\n';
 		}
-		cout << "NEW DATAGRAM\n";
-		buf[bsize] = '\0';
 
+		cout << "NEW DATAGRAM\n";
+		buf[buf_size] = '\0';
 		cout << buf << '\n';
+
+		sendto(listen_socket, &buf[0], buf_size, 0, (sockaddr*)&from_s_in, sizeof(from_s_in));
+
 	}
 
 	closesocket(listen_socket);
