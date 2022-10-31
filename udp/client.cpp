@@ -39,7 +39,7 @@ int main()
 	}
 
 
-	SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+	SOCKET s = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if (s == INVALID_SOCKET) {
 		cout << "socket error: " << WSAGetLastError() << '\n';
@@ -69,31 +69,29 @@ int main()
 	remote_addr.sin_port = htons(SERVER_PORT);
 	remote_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-	char buf[BUF_LEN] = { 0 };
+
 	string msg = "echo message";
+
+	int remote_len;
+	char buf[BUF_LEN] = {0};
 
 
 	while (true) {
 		cin >> msg;
 		sendto(s, (char*) &msg[0], msg.size(), 0, (sockaddr*)&remote_addr, sizeof(remote_addr));
-	}
 
-	do {
-		cout << "Waiting for respond...\n";
-		int from_len = recv(s, (char*)buf, BUF_LEN, 0);
-		cout << "Server responded: ";
-		for (int i = 0; i < from_len; i++) {
-			cout << buf[i];
+		remote_len = sizeof(remote_addr);
+
+		int buf_size = recvfrom(s, &buf[0], sizeof(buf) - 1, 0, (sockaddr*)&remote_addr, &remote_len);
+
+		if (buf_size == SOCKET_ERROR) {
+			cout << "recvfrom error" << WSAGetLastError() << '\n';
 		}
 
-		cout << "\nPlease, enter your request\n";
-
-		getline(cin, msg);
-
-		send(s, (char*) msg.c_str(), msg.size(), 0);
-
-	} while (msg != "stop");
-
+		cout << "NEW DATAGRAM\n";
+		buf[buf_size] = '\0';
+		cout << buf << '\n';
+	}
 
 	closesocket(s);
 	return cleanUp();
