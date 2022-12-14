@@ -10,11 +10,12 @@
 using namespace std;
 
 #define	SERVER_PORT 5000
-#define BUF_SIZE 64
 
 struct Message {
-	char nickname[255];
-	char message[255];
+	char nickname[255] = {};
+	char message[255] = {};
+	bool isPrivate = false;
+	char to[255] = {};
 
 	void setNickname(string nick) {
 		strcpy_s(nickname, nick.c_str());
@@ -22,47 +23,109 @@ struct Message {
 	void setMessage(string msg) {
 		strcpy_s(message, msg.c_str());
 	}
+	void setTo(string toUser) {
+		strcpy_s(to, toUser.c_str());
+	}
 	string getNickname() {
 		return nickname;
 	}
 	string getMessage() {
 		return message;
 	}
+	string getTo() {
+		return to;
+	}
 };
 
+struct client {
+	string nickname;
+	SOCKET socket;
 
-vector<SOCKET> clientSockets;
+	client(SOCKET s, string nick) {
+		socket = s;
+		nickname = nick;
+	}
 
-int clients = 0;
+	void sendMessage(Message message) {
+		send(socket, (char*)&message, sizeof(message), 0);
+	}
+};
+vector<client> clients;
 
 void printUsers() {
-	cout << "Clients online: " << clients << '\n';
+
+	cout << "Clients online: " << '\n';
+	for (int i = 0; i < clients.size(); i++) {
+		cout << clients[i].nickname << '\n';
+	}
 }
+
 
 DWORD WINAPI connectToClient(LPVOID client_socket) {
 
-	// послать всем клиентам сообщение о том что клиент присоединился
-
-
 	SOCKET from_socket = ((SOCKET*)client_socket)[0];
-	int from_len = 1;
+	Message resp;
+	string clientNickname;
 
-	Message m;
 
-	while (from_len) {
-		
-		from_len = recv(from_socket, (char*)&m, sizeof(m), 0);
-		cout << "recieved" << m.getMessage() << endl;
-		for (int i = 0; i < clientSockets.size(); i++) {
-			cout << "sending\n";
-			send(clientSockets[i], (char*)&m, sizeof(m), 0);
+	int	from_len = recv(from_socket, (char*)&resp, sizeof(resp), 0);
+
+	if (from_socket != SOCKET_ERROR) {
+		clientNickname = resp.getNickname();
+		resp.setNickname("SERVER");
+		resp.setMessage(clientNickname + " entered this chat");
+
+		clients.push_back(client{ from_socket, clientNickname });
+
+		for (int i = 0; i < clients.size(); i++) {
+			if (clients[i].nickname != clientNickname) {
+				clients[i].sendMessage(resp);
+			}
 		}
 	}
 
+	printUsers();
+	
+	from_len = recv(from_socket, (char*)&resp, sizeof(resp), 0);
+
+	while (from_len != SOCKET_ERROR) {
+
+		cout << "Recieved: " << resp.getMessage() << " from " << resp.getNickname() << '\n';
+
+		if (resp.isPrivate) {
+			cout << "Private\n";
+			for (int i = 0; i < clients.size(); i++) {
+				if (clients[i].nickname == resp.getTo()) {
+					clients[i].sendMessage(resp);
+					break;
+				}
+			}
+		}
+		else {
+			for (int i = 0; i < clients.size(); i++) {
+				if (clients[i].nickname != resp.getNickname()) {
+					clients[i].sendMessage(resp);
+				}
+			}
+		}
+		from_len = recv(from_socket, (char*)&resp, sizeof(resp), 0);
+	}
+
 	cout << "Connection closed\n";
-	shutdown(from_socket, SD_BOTH);
+
+	resp.setNickname("SERVER");
+	resp.setMessage(clientNickname + " left this chat");
+	for (int i = 0; i < clients.size(); i++) {
+		if (from_socket == clients[i].socket) {
+			clients.erase(clients.begin() + i);
+			i--;
+		}
+		else {
+			clients[i].sendMessage(resp);
+		}
+	}
+
 	closesocket(from_socket);
-	clients--;
 	printUsers();
 	return 0;
 }
@@ -127,13 +190,9 @@ int main()
 
 	while (true) {
 		int from_len = sizeof(from_s_in);
-		from_socket = accept(listen_socket, (sockaddr*)&from_s_in, &from_len);
+		from_socket = accept(listen_socket, (sockaddr*)&from_s_in, &from_len); //!
 
 		cout << "New connection with " << inet_ntoa(from_s_in.sin_addr) << '\n';
-		clients++;
-		clientSockets.push_back(from_socket);
-
-		printUsers();
 
 		DWORD thID;
 		CreateThread(NULL, NULL, connectToClient, &from_socket, NULL, &thID);
