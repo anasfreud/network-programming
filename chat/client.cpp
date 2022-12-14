@@ -3,17 +3,19 @@
 #include <iostream>
 #include <winsock2.h>
 #include <string>
+#include <vector>
 
 #pragma comment (lib, "Ws2_32.lib")
 
 using namespace std;
 
 #define	SERVER_PORT 5000
-#define BUF_LEN 64
 
 struct Message {
-	char nickname[255];
-	char message[255];
+	char nickname[255] = {};
+	char message[255] = {};
+	bool isPrivate = false;
+	char to[255] = {};
 
 	void setNickname(string nick) {
 		strcpy_s(nickname, nick.c_str());
@@ -21,22 +23,32 @@ struct Message {
 	void setMessage(string msg) {
 		strcpy_s(message, msg.c_str());
 	}
+	void setTo(string toUser) {
+		strcpy_s(to, toUser.c_str());
+	}
 	string getNickname() {
 		return nickname;
 	}
 	string getMessage() {
 		return message;
 	}
+	string getTo() {
+		return to;
+	}
 };
 
-// прием сообщений
-DWORD WINAPI recieveMessages(LPVOID socket) {
-	SOCKET s = ((SOCKET*)socket)[0];
-	Message m;
-	int from_len = 1;
+
+DWORD WINAPI recieve(LPVOID client_socket) {
+	SOCKET s = ((SOCKET*)client_socket)[0];
+	Message resp;
+	int from_len = recv(s, (char*)&resp, sizeof(resp), 0);
+
 	while (from_len != SOCKET_ERROR) {
-		int from_len = recv(s, (char*)&m, sizeof(m), 0);
-		cout << m.getNickname() + ": " + m.getMessage() + '\n';
+		if (resp.isPrivate) {
+			cout << "<private> ";
+		}
+		cout << resp.getNickname() << ": " << resp.getMessage() << '\n';
+		from_len = recv(s, (char*)&resp, sizeof(resp), 0);
 	}
 	return 0;
 }
@@ -44,25 +56,30 @@ DWORD WINAPI recieveMessages(LPVOID socket) {
 
 int cleanUp()
 {
-
 	if (WSACleanup() == SOCKET_ERROR) {
 		cout << "WSACleanup() error " << WSAGetLastError() << '\n';
-		return 1;
-	}
-	else {
-		return 0;
+		exit(-1);
 	}
 }
 
-bool isRecievingMessages = false;
+vector<string> split(string str) {
+	vector<string> v;
+	int index = 0;
+	while (index < str.length()) {
+		string substr = "";
+		while (str[index] != ' ' && index < str.length()) {
+			substr += str[index];
+			index++;
+		}
+		index++;
+		v.push_back(substr);
+	}
+	return v;
+}
+
 
 int main()
 {
-	cout << "Welcome to the local chat!\n";
-	cout << "Enter your nickname\n";
-	string nickname;
-	cin >> nickname;
-
 	int iResult;
 
 	WSAData wsaData;
@@ -71,7 +88,8 @@ int main()
 
 	if (iResult) {
 		cout << "WSAStartup error: " << WSAGetLastError() << '\n';
-		return cleanUp();
+		cleanUp();
+		return 0;
 	}
 
 
@@ -80,7 +98,8 @@ int main()
 	if (s == INVALID_SOCKET) {
 		cout << "socket error: " << WSAGetLastError() << '\n';
 		closesocket(s);
-		return cleanUp();
+		cleanUp();
+		return 0;
 	}
 
 
@@ -96,51 +115,55 @@ int main()
 	if (iResult == SOCKET_ERROR) {
 		cout << "Server connection error: " << WSAGetLastError() << '\n';
 		closesocket(s);
-		return cleanUp();
+		cleanUp();
+		return 0;
 	}
 
-	cout << "Succesfully connected to the server. You can chat now! :3\n";
-	
+	cout << "Welcome to chat! Enter your username: \n";
+	string username;
+	getline(cin, username);
+
+	cout << "\n - To quit the application, type /quit\n";
+	cout << " - To send private message, type /private [username] [message]\n";
+	cout << " - To send public message, type your message and press ENTER\n\n";
+
+
+	DWORD thID;
+	CreateThread(NULL, NULL, recieve, &s, NULL, &thID);
+
+	Message m;
+	m.setNickname(username);
+	string msg = "";
+
+	send(s, (char*)&m, sizeof(m), 0);
+
 	while (true) {
-		cout << "Avalible commands:\n";
-		cout << "/general - enter general chat;\n";
-		cout << "/private - send private message;\n";
-		cout << "/quit - close application;\n";
 
-		string cmd;
-		cin >> cmd;
-		if (cmd == "/general") {
-
-			cout << "Enter /leave to leave general chat;\n";
-
-			Message m;
-			m.setNickname(nickname);
-
-			DWORD thID;
-			CreateThread(NULL, NULL, recieveMessages, &s, NULL, &thID);
-
-			string msg;
-			getline(cin, msg);
-			while (getline(cin, msg)) {
-				if (msg == "/leave") {
-					break;
-				}
-				m.setMessage(msg);
-				send(s, (char*)&m, sizeof(m), 0);
-			}
-		} else if (cmd == "/private") {
-			cout << "Not implemented yet :(\n";
-		} else if (cmd == "/quit") {
-			shutdown(s, SD_BOTH);
-			closesocket(s);
-			//return cleanUp();
+		getline(cin, msg);
+		if (msg == "") {
+			continue;
 		}
+		vector<string> words = split(msg);
 
+		if (words[0][0] == '/') {
+			if (words[0] == "/quit") {
+				break;
+			} else if (words[0] == "/private") {
+				m.isPrivate = true;
+				m.setTo(words[1]);
+				m.setMessage(msg.erase(0, words[0].length() + words[1].length() + 2));
+				send(s, (char*)&m, sizeof(m), 0);
+			} else {
+				cout << "Unknown command\n";
+			}
+		} else {
+			m.isPrivate = false;
+			m.setMessage(msg);
+			send(s, (char*)&m, sizeof(m), 0);
+		}
 	}
-	
-	
 
 	closesocket(s);
-	
-	return cleanUp();
+	cleanUp();
+	return 0;
 }
